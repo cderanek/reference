@@ -115,20 +115,16 @@ def rgb2rgba(in_raster_path, out_raster_path, rbandNum=3, gbandNum=2, bbandNum=1
         band = band.ReadAsArray().astype(float)
         outband = outRaster.GetRasterBand(band_num)
         band[band==nodata] = 0.0
-        print(band[2500:2600,])
-        print(band.max())
         band *= 255 / band.max()
-        print(band[2500:2600,])
         outband.WriteArray(band.astype(int))
         outband.SetNoDataValue(0)
     
-    # # write alpha band
-    # outband = outRaster.GetRasterBand(4)
-    # outband.WriteArray(alphaArray)
-    # outband.SetNoDataValue(0)
-    
+    # write alpha band
+    outband = outRaster.GetRasterBand(4)
+    outband.WriteArray(alphaArray)
+    outband.SetNoDataValue(0)
 
-    # settings srs from input tif file. ?? Is it necessary to do this after adding bands? What is the difference between gdal, ogr, osr modules?
+    # settings srs from input tif file. ?? Is it necessary to do this after adding bands?
     outRasterSRS = osr.SpatialReference(wkt=prj)
     outRaster.SetProjection(outRasterSRS.ExportToWkt())
     outband.FlushCache()
@@ -153,7 +149,7 @@ def mergeShpFiles(shpFilePathsL, outFile):
     
     for shpF in shpFilePathsL[2:]:
         print('Currently appending:', shpF.split('/')[-1])
-        process = subprocess.run(' '.join(['ogrmerge.py -single -o', outFile, outFile, shpF, '-append -update -src_layer_field_name date']),
+        process = subprocess.run(' '.join(['ogrmerge.py -single -o', outFile, outFile, shpF, '-overwrite_layer -src_layer_field_name date']),
                                 shell=True,
                                 stdout=subprocess.PIPE,
                                 universal_newlines=True)
