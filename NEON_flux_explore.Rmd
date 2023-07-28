@@ -1,0 +1,168 @@
+---
+title: "NEON_flux_explore"
+output: html_document
+date: "2023-06-03"
+---
+
+```{r}
+# install.packages('BiocManager')
+# BiocManager::install('rhdf5')
+# install.packages('neonUtilities')
+options(stringsAsFactors=F)
+library(neonUtilities)
+library(tidyr)
+library(ggplot2)
+```
+
+
+```{r}
+SAVE_PATH = '/Users/cd/Documents/BFAST/flux/'
+SITES = c('SOAP')
+START_DATE = '2018-01'
+END_DATE = '2018-12'
+PRODUCT = 'DP4.00200.001' # eddy covariance
+
+# increase timeout
+options(timeout=300)
+```
+
+
+```{r}
+zipsByProduct(dpID=PRODUCT,
+              package='basic',
+              site=SITES,
+              startdate=START_DATE,
+              enddate=END_DATE,
+              savepath=SAVE_PATH,
+              check.size=FALSE)
+```
+
+
+```{r}
+flux = stackEddy(filepath = paste0(SAVE_PATH, 'filesToStack00200/'),
+                 level = 'dp04')
+```
+
+
+```{r}
+flux$SOAP = flux$SOAP %>%
+  dplyr::mutate(timeBgn_CA=lubridate::with_tz(timeBgn, tz='US/Pacific')) %>%
+  dplyr::mutate(day_CA=lubridate::date(timeBgn_CA))
+
+flux$SOAP_noon = flux$SOAP %>%
+  dplyr::filter(lubridate::hour(timeBgn_CA)>11 & lubridate::hour(timeBgn_CA)<15) %>%
+  dplyr::group_by(day_CA) %>%
+  dplyr::summarise(maxStorTempFlux = max(data.fluxTemp.stor.flux))
+
+flux$SOAP_noon
+```
+
+```{r}
+ggplot(data=flux$SOAP, aes(x=flux$SOAP$timeBgn_CA, y=flux$SOAP$data.fluxTemp.stor.flux)) +
+  geom_line() +
+  scale_x_datetime(breaks = seq(as.POSIXct(min(flux$SOAP$timeBgn_CA)), as.POSIXct(max(flux$SOAP$timeBgn_CA)), by='month'),
+                   labels = lubridate::month(seq(as.POSIXct(min(flux$SOAP$timeBgn_CA)), as.POSIXct(max(flux$SOAP$timeBgn_CA)), by='month'))) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) +
+  scale_y_continuous(limits = c(-100, 100)) +
+  theme_classic()
+
+
+ggplot(data=flux$SOAP_noon, 
+       aes(x=flux$SOAP_noon$day_CA, 
+           y=flux$SOAP_noon$maxStorTempFlux)) +
+  geom_line() +
+  # scale_x_datetime(breaks=12,
+  scale_x_date(breaks = seq.Date(as.Date(min(flux$SOAP_noon$day_CA)),
+                                as.Date(max(flux$SOAP_noon$day_CA)),
+                                by='month'),
+                   labels = as.character(lubridate::month(seq(as.POSIXct(min(flux$SOAP_noon$day_CA)),
+                                                 as.POSIXct(max(flux$SOAP_noon$day_CA)),
+                                                 by='month')))) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) +
+  scale_y_continuous(limits = c(-100, 100)) +
+  theme_classic()
+```
+
+
+
+```{r}
+X_VAR = 'data.fluxTemp.stor.flux'
+flux$SOAP_daily = flux$SOAP %>% 
+  dplyr::mutate(timeBgn_CA=lubridate::with_tz(timeBgn, tz='US/Pacific')) %>%
+  dplyr::mutate(day_CA=lubridate::date(timeBgn_CA)) %>%
+  dplyr::filter(lubridate::month(timeBgn_CA)==9 & lubridate::day(timeBgn_CA)<10)
+
+
+rect_left = flux$SOAP_daily %>%
+  dplyr::filter(lubridate::hour(timeBgn_CA)==0 & lubridate::minute(timeBgn_CA)==0 & lubridate::day(timeBgn_CA)%%2==0) %>%
+  dplyr::select(timeBgn_CA)
+rect_left = as.vector(rect_left)
+
+daily_rectangles <- data.frame(
+  xmin = rect_left,
+  xmax = sapply(rect_left, function(x) {lubridate::with_tz(x+lubridate::days(1), tz='US/Pacific')}),
+  ymin = rep(min(flux$SOAP_daily$data.fluxTemp.stor.flux, na.rm=TRUE),2),
+  ymax = rep(max(flux$SOAP_daily$data.fluxTemp.stor.flux, na.rm=TRUE),2)
+)
+
+daily_rectangles$timeBgn_CA.1 = lubridate::with_tz(daily_rectangles$timeBgn_CA.1, tz='US/Pacific')
+colnames(daily_rectangles) <- c('xmin','xmax','ymin','ymax')
+
+ggplot() +
+  geom_rect(data=daily_rectangles, aes(xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax), 
+            fill='gray80', alpha=0.8) +
+  geom_line(data=flux$SOAP_daily, 
+            aes(x=flux$SOAP_daily$timeBgn_CA, 
+                y=flux$SOAP_daily$data.fluxTemp.stor.flux)) +
+  scale_x_datetime(breaks = seq(as.POSIXct(min(flux$SOAP_daily$timeBgn_CA)), 
+                                as.POSIXct(max(flux$SOAP_daily$timeBgn_CA)), 
+                                length.out=19),
+                   labels = lubridate::hour(seq(as.POSIXct(min(flux$SOAP_daily$timeBgn_CA)),
+                                                as.POSIXct(max(flux$SOAP_daily$timeBgn_CA)), 
+                                                length.out=19))) +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1))
+```
+
+```{r}
+ts_flux = xts::xts(x=flux$SOAP$data.fluxTemp.stor.flux, order.by=flux$SOAP$timeBgn_CA)
+# ts_flux = as.ts(ts_flux, frequency=12)
+# plot.ts(ts_flux)
+
+trunc_ts = flux$SOAP %>%
+  dplyr::filter(lubridate::month(timeBgn_CA) >2 & lubridate::month(timeBgn_CA) < 9)
+
+trunc_ts2 = flux$SOAP_daily = flux$SOAP %>% 
+  dplyr::mutate(timeBgn_CA=lubridate::with_tz(timeBgn, tz='US/Pacific')) %>%
+  dplyr::mutate(day_CA=lubridate::date(timeBgn_CA)) %>%
+  dplyr::filter(lubridate::month(timeBgn_CA)==9 & lubridate::day(timeBgn_CA)<10)
+
+ts_flux = ts(data=trunc_ts$data.fluxTemp.stor.flux,
+   start=c(2017, 0),
+   frequency=48)
+plot(ts_flux)
+
+ts_flux2 = ts(data=trunc_ts2$data.fluxTemp.stor.flux,
+   start=c(2017, 1),
+   frequency=48*365)
+plot(ts_flux2)
+
+trunc_noon = flux$SOAP_noon %>%
+  dplyr::filter(lubridate::month(day_CA)>2 & lubridate::month(day_CA)<10)
+  
+ts_flux3 = ts(data=trunc_noon$maxStorTempFlux,
+   start=c(2018, 1),
+   frequency=24)
+plot(ts_flux3)
+
+# run bfast
+test = bfast::bfast(ts_flux3, h=0.15, season='harmonic', decomp='stlplus')
+plot(test)
+
+datats <- ts(rowSums(bfast::simts$time.series))
+tsp(datats) <- tsp(bfast::simts$time.series)
+plot(datats)
+datats_bfast = bfast::bfast(datats, h = 0.15, season = "dummy", max.iter = 1)
+pplot(bfast::bfast(datats, h = 0.15, season = "dummy", max.iter = 1))
+
+```
+
