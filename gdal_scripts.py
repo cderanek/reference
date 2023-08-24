@@ -142,10 +142,18 @@ def rgb2rgba(in_raster_path, out_raster_path, rbandNum=3, gbandNum=2, bbandNum=1
 
 
 def mergeShpFiles(shpFilePathsL, outFile):
+    ## UPDATE THIS TO NOT USE THE SUBPROCESS BY IMPORTING: from osgeo_utils import ogrmerge, then call ogrmerge()
+    '''ogrmerge(src_datasets: Optional[Sequence[str]] = None, dst_filename: Union[str, os.PathLike, NoneType] = None, driver_name: Optional[str] = None, overwrite_ds: bool = False, overwrit
+e_layer: bool = False, update: bool = False, append: bool = False, single_layer: bool = False, layer_name_template: Optional[str] = None, skip_failures: bool = False, src_geom_types: Opt
+ional[Sequence[int]] = None, field_strategy: Optional[str] = None, src_layer_field_name: Optional[str] = None, src_layer_field_content: Optional[str] = None, a_srs: Optional[str] = None,
+ s_srs: Optional[str] = None, t_srs: Optional[str] = None, dsco: Optional[Sequence[str]] = None, lco: Optional[Sequence[str]] = None, progress_callback: Optional = None, progress_arg: Op
+tional = None)
+    '''
     process = subprocess.run(' '.join(['ogrmerge.py -single -o', outFile, shpFilePathsL[0], shpFilePathsL[1], '-src_layer_field_name date']),
                              shell=True,
                              stdout=subprocess.PIPE,
                              universal_newlines=True)
+    print(process.stdout)
     
     for shpF in shpFilePathsL[2:]:
         print('Currently appending:', shpF.split('/')[-1])
@@ -155,6 +163,16 @@ def mergeShpFiles(shpFilePathsL, outFile):
                                 universal_newlines=True)
         print(process.stdout)
 
+def convertVect(informat, infile, outformat, outfile):
+    gdal.UseExceptions()
+    gdal.VectorTranslate(outfile, srcDS=infile, format=outformat)
+
+
+def printVect(format, infile):
+    '''From chapter 3 of Geoprocessing with Python
+    https://www.manning.com/books/geoprocessing-with-python
+    '''
+    pass
 
 
 
@@ -168,8 +186,10 @@ if __name__ == '__main__':
     # maskRasterByVect(inRaster, '/Users/cd/Downloads/drive-download-20230621T173107Z-001/teak_200m_sampleSites_fullJuneUpdate.shp', clippedRaster)
     # rgb2rgba(clippedRaster, outRaster)
 
-    shpFiles = glob.glob('/Users/cd/Documents/field_data/garmin/*.shp')
-    mergeShpFiles(shpFiles, '/Users/cd/Documents/field_data/garmin/garmin_merged.shp')
+    # shpFiles = glob.glob('/Users/cd/Documents/field_data/garmin/*.shp')
+    # mergeShpFiles(shpFiles, '/Users/cd/Documents/field_data/garmin/garmin_merged.shp')
+    convertVect('KML','/Users/cd/Desktop/NEON_2023_FieldWork/basemaps/fire/burned_creekfire.kmz', 'ESRI Shapefile', '/Users/cd/Desktop/NEON_2023_FieldWork/basemaps/fire/burned_creekfire.shp')
+    convertVect('KML','/Users/cd/Desktop/NEON_2023_FieldWork/basemaps/fire/unburned_creekfire.kmz', 'ESRI Shapefile', '/Users/cd/Desktop/NEON_2023_FieldWork/basemaps/fire/unburned_creekfire.shp')
 
 
     '''ogrmerge.py -single -o merged.shp /Users/cd/Downloads/drive-download-20230726T181224Z-001/TEAK072023.shp /Users/cd/Downloads/drive-download-20230726T181224Z-001/TEAK0715231.shp -src_layer_field_name date'''
